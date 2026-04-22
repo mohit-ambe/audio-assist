@@ -5,12 +5,12 @@
 #include <optional>
 #include <vector>
 
-namespace audio_assist {
+namespace audio_assist::capture {
 
 template <typename T>
-class LockFreeRingBuffer {
+class CaptureRingBuffer {
 public:
-    explicit LockFreeRingBuffer(std::size_t capacity)
+    explicit CaptureRingBuffer(std::size_t capacity)
         : capacity_(capacity + 1), slots_(capacity_) {}
 
     bool push(T value) {
@@ -53,4 +53,4 @@ private:
     std::atomic<std::size_t> tail_{0};
 };
 
-}  // namespace audio_assist
+}  // namespace audio_assist::capture

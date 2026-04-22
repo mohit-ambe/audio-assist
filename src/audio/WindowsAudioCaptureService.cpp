@@ -1,4 +1,4 @@
-#include "audio/AudioCaptureService.h"
+#include "audio/WindowsAudioCaptureService.h"
 
 #include <windows.h>
 #include <Audioclient.h>
@@ -20,7 +20,7 @@
 #include <thread>
 #include <vector>
 
-namespace audio_assist {
+namespace audio_assist::capture {
 
 using Microsoft::WRL::ComPtr;
 
@@ -118,7 +118,7 @@ std::vector<float> convertToFloat(const BYTE* data, std::uint32_t frames, const 
 
 }  // namespace
 
-struct AudioCaptureService::StreamState {
+struct WindowsAudioCaptureService::StreamState {
     ComPtr<IMMDeviceEnumerator> enumerator;
     ComPtr<IMMDevice> device;
     ComPtr<IAudioClient> client;
@@ -129,16 +129,16 @@ struct AudioCaptureService::StreamState {
     UINT32 buffer_frames = 0;
 };
 
-AudioCaptureService::AudioCaptureService() = default;
+WindowsAudioCaptureService::WindowsAudioCaptureService() = default;
 
-AudioCaptureService::~AudioCaptureService() {
+WindowsAudioCaptureService::~WindowsAudioCaptureService() {
     stop();
 }
 
-bool AudioCaptureService::initialize(const std::wstring& device_id, CaptureMode mode) {
+bool WindowsAudioCaptureService::initialize(const std::wstring& device_id, AudioCaptureMode mode) {
     configured_device_id_ = device_id;
     mode_ = mode;
-    initialized_.store(mode == CaptureMode::EndpointLoopback);
+    initialized_.store(mode == AudioCaptureMode::EndpointLoopback);
 
     std::scoped_lock lock(metrics_mutex_);
     metrics_ = {};
@@ -148,16 +148,16 @@ bool AudioCaptureService::initialize(const std::wstring& device_id, CaptureMode 
     return initialized_.load();
 }
 
-bool AudioCaptureService::start() {
+bool WindowsAudioCaptureService::start() {
     if (!initialized_.load() || running_.exchange(true)) {
         return initialized_.load();
     }
 
-    capture_thread_ = std::thread(&AudioCaptureService::captureLoop, this);
+    capture_thread_ = std::thread(&WindowsAudioCaptureService::captureLoop, this);
     return true;
 }
 
-void AudioCaptureService::stop() {
+void WindowsAudioCaptureService::stop() {
     if (!running_.exchange(false)) {
         return;
     }
@@ -175,20 +175,20 @@ void AudioCaptureService::stop() {
     resample_position_ = 0.0;
 }
 
-std::optional<AudioFrame> AudioCaptureService::getMonoFrame() {
+std::optional<CaptureAudioFrame> WindowsAudioCaptureService::getMonoFrame() {
     return mono_frames_.pop();
 }
 
-std::optional<AudioFrame> AudioCaptureService::getStereoFrame() {
+std::optional<CaptureAudioFrame> WindowsAudioCaptureService::getStereoFrame() {
     return stereo_frames_.pop();
 }
 
-CaptureMetrics AudioCaptureService::getMetrics() const {
+AudioCaptureMetrics WindowsAudioCaptureService::getMetrics() const {
     std::scoped_lock lock(metrics_mutex_);
     return metrics_;
 }
 
-std::vector<DeviceInfo> AudioCaptureService::listOutputDevices() {
+std::vector<CaptureDeviceInfo> WindowsAudioCaptureService::listOutputDevices() {
     ScopedCoInitialize coinit;
     if (FAILED(coinit.result()) && coinit.result() != RPC_E_CHANGED_MODE) {
         return {};
@@ -209,7 +209,7 @@ std::vector<DeviceInfo> AudioCaptureService::listOutputDevices() {
     UINT count = 0;
     collection->GetCount(&count);
 
-    std::vector<DeviceInfo> devices;
+    std::vector<CaptureDeviceInfo> devices;
     devices.reserve(count);
 
     for (UINT i = 0; i < count; ++i) {
@@ -223,7 +223,7 @@ std::vector<DeviceInfo> AudioCaptureService::listOutputDevices() {
             continue;
         }
 
-        DeviceInfo info;
+        CaptureDeviceInfo info;
         info.id = id;
         info.name = readFriendlyName(device.Get());
         info.is_default = (info.id == default_id);
@@ -234,7 +234,7 @@ std::vector<DeviceInfo> AudioCaptureService::listOutputDevices() {
     return devices;
 }
 
-bool AudioCaptureService::openStream(StreamState& state) {
+bool WindowsAudioCaptureService::openStream(StreamState& state) {
     closeStream(state);
 
     const auto fail = [&]() {
@@ -242,7 +242,7 @@ bool AudioCaptureService::openStream(StreamState& state) {
         return false;
     };
 
-    if (mode_ != CaptureMode::EndpointLoopback) {
+    if (mode_ != AudioCaptureMode::EndpointLoopback) {
         std::wcerr << L"Application loopback is not wired in this prototype yet." << std::endl;
         return false;
     }
@@ -309,7 +309,7 @@ bool AudioCaptureService::openStream(StreamState& state) {
     return true;
 }
 
-void AudioCaptureService::closeStream(StreamState& state) {
+void WindowsAudioCaptureService::closeStream(StreamState& state) {
     if (state.client) {
         state.client->Stop();
     }
@@ -326,7 +326,7 @@ void AudioCaptureService::closeStream(StreamState& state) {
     metrics_.device_healthy = false;
 }
 
-void AudioCaptureService::captureLoop() {
+void WindowsAudioCaptureService::captureLoop() {
     ScopedCoInitialize coinit;
     if (FAILED(coinit.result()) && coinit.result() != RPC_E_CHANGED_MODE) {
         running_.store(false);
@@ -417,7 +417,7 @@ void AudioCaptureService::captureLoop() {
     }
 }
 
-void AudioCaptureService::processChunk(const float* interleaved, std::uint32_t frames, std::uint16_t channels) {
+void WindowsAudioCaptureService::processChunk(const float* interleaved, std::uint32_t frames, std::uint16_t channels) {
     const auto input_rate = getMetrics().input_sample_rate;
     if (input_rate == 0) {
         return;
@@ -461,19 +461,19 @@ void AudioCaptureService::processChunk(const float* interleaved, std::uint32_t f
     produceFrames();
 }
 
-void AudioCaptureService::produceFrames() {
+void WindowsAudioCaptureService::produceFrames() {
     std::scoped_lock lock(resample_mutex_);
     const auto samples_per_stereo_frame = frame_samples_ * 2;
 
     while (pending_output_.size() >= samples_per_stereo_frame) {
-        AudioFrame stereo;
+        CaptureAudioFrame stereo;
         stereo.timestamp_ms = nowMs();
         stereo.sample_rate = target_sample_rate_;
         stereo.channels = 2;
         stereo.num_samples = static_cast<std::uint32_t>(frame_samples_);
         stereo.data.assign(pending_output_.begin(), pending_output_.begin() + samples_per_stereo_frame);
 
-        AudioFrame mono;
+        CaptureAudioFrame mono;
         mono.timestamp_ms = stereo.timestamp_ms;
         mono.sample_rate = target_sample_rate_;
         mono.channels = 1;
@@ -500,7 +500,7 @@ void AudioCaptureService::produceFrames() {
     }
 }
 
-std::wstring AudioCaptureService::resolveDeviceId() const {
+std::wstring WindowsAudioCaptureService::resolveDeviceId() const {
     if (!configured_device_id_.empty()) {
         return configured_device_id_;
     }
@@ -513,4 +513,4 @@ std::wstring AudioCaptureService::resolveDeviceId() const {
     return getDefaultRenderDeviceId(enumerator.Get());
 }
 
-}  // namespace audio_assist
+}  // namespace audio_assist::capture

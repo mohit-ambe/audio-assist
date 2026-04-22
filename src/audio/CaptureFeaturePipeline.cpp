@@ -1,10 +1,10 @@
-#include "audio/FeaturePipeline.h"
+#include "audio/CaptureFeaturePipeline.h"
 
 #include <algorithm>
 #include <cmath>
 #include <complex>
 
-namespace audio_assist {
+namespace audio_assist::capture {
 
 namespace {
 
@@ -21,7 +21,7 @@ double melToHz(double mel) {
 
 }  // namespace
 
-FeaturePipeline::FeaturePipeline() : mel_filter_bank_(buildMelFilterBank()) {
+CaptureFeaturePipeline::CaptureFeaturePipeline() : mel_filter_bank_(buildMelFilterBank()) {
     analysis_window_.resize(stft_window_samples_);
     for (std::size_t i = 0; i < stft_window_samples_; ++i) {
         analysis_window_[i] =
@@ -29,7 +29,7 @@ FeaturePipeline::FeaturePipeline() : mel_filter_bank_(buildMelFilterBank()) {
     }
 }
 
-void FeaturePipeline::pushMonoFrame(const AudioFrame& frame) {
+void CaptureFeaturePipeline::pushMonoFrame(const CaptureAudioFrame& frame) {
     if (frame.channels != 1 || frame.sample_rate != sample_rate_ || frame.data.empty()) {
         return;
     }
@@ -57,16 +57,16 @@ void FeaturePipeline::pushMonoFrame(const AudioFrame& frame) {
     produceAvailableTensors(frame);
 }
 
-std::optional<FeatureTensor> FeaturePipeline::getNextTensor() {
+std::optional<CaptureFeatureTensor> CaptureFeaturePipeline::getNextTensor() {
     return ready_tensors_.pop();
 }
 
-FeaturePipelineMetrics FeaturePipeline::getMetrics() const {
+CaptureFeaturePipelineMetrics CaptureFeaturePipeline::getMetrics() const {
     std::scoped_lock lock(mutex_);
     return metrics_;
 }
 
-void FeaturePipeline::produceAvailableTensors(const AudioFrame& frame) {
+void CaptureFeaturePipeline::produceAvailableTensors(const CaptureAudioFrame& frame) {
     const auto buffered_start_sample = total_samples_seen_ - rolling_mono_.size();
     if (next_window_start_sample_ < buffered_start_sample) {
         next_window_start_sample_ = buffered_start_sample;
@@ -74,7 +74,7 @@ void FeaturePipeline::produceAvailableTensors(const AudioFrame& frame) {
 
     while (next_window_start_sample_ + model_window_samples_ <= total_samples_seen_) {
         const auto window_offset = static_cast<std::size_t>(next_window_start_sample_ - buffered_start_sample);
-        FeatureTensor tensor = buildTensor(window_offset, frame.timestamp_ms);
+        CaptureFeatureTensor tensor = buildTensor(window_offset, frame.timestamp_ms);
         if (ready_tensors_.push(std::move(tensor))) {
             ++metrics_.tensors_produced;
         } else {
@@ -86,8 +86,8 @@ void FeaturePipeline::produceAvailableTensors(const AudioFrame& frame) {
     metrics_.samples_buffered = rolling_mono_.size();
 }
 
-FeatureTensor FeaturePipeline::buildTensor(std::size_t window_offset, std::uint64_t frame_timestamp_ms) const {
-    FeatureTensor tensor;
+CaptureFeatureTensor CaptureFeaturePipeline::buildTensor(std::size_t window_offset, std::uint64_t frame_timestamp_ms) const {
+    CaptureFeatureTensor tensor;
     tensor.sample_rate = sample_rate_;
     tensor.mel_bins = mel_bins_;
     tensor.time_steps = time_steps_;
@@ -117,7 +117,7 @@ FeatureTensor FeaturePipeline::buildTensor(std::size_t window_offset, std::uint6
     return tensor;
 }
 
-std::vector<float> FeaturePipeline::computePowerSpectrum(const std::vector<float>& windowed) const {
+std::vector<float> CaptureFeaturePipeline::computePowerSpectrum(const std::vector<float>& windowed) const {
     const std::size_t bins = (fft_size_ / 2) + 1;
     std::vector<float> power(bins, 0.0f);
     std::vector<std::complex<float>> spectrum(fft_size_);
@@ -161,7 +161,7 @@ std::vector<float> FeaturePipeline::computePowerSpectrum(const std::vector<float
     return power;
 }
 
-std::vector<float> FeaturePipeline::computeMelEnergies(const std::vector<float>& power_spectrum) const {
+std::vector<float> CaptureFeaturePipeline::computeMelEnergies(const std::vector<float>& power_spectrum) const {
     std::vector<float> mel_energies(mel_bins_, 0.0f);
     for (std::size_t mel = 0; mel < mel_filter_bank_.size(); ++mel) {
         double energy = 0.0;
@@ -173,7 +173,7 @@ std::vector<float> FeaturePipeline::computeMelEnergies(const std::vector<float>&
     return mel_energies;
 }
 
-std::vector<std::vector<float>> FeaturePipeline::buildMelFilterBank() const {
+std::vector<std::vector<float>> CaptureFeaturePipeline::buildMelFilterBank() const {
     const std::size_t spectrum_bins = (fft_size_ / 2) + 1;
     std::vector<std::vector<float>> bank(mel_bins_, std::vector<float>(spectrum_bins, 0.0f));
 
@@ -212,4 +212,4 @@ std::vector<std::vector<float>> FeaturePipeline::buildMelFilterBank() const {
     return bank;
 }
 
-}  // namespace audio_assist
+}  // namespace audio_assist::capture

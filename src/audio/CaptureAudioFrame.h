@@ -4,9 +4,9 @@
 #include <string>
 #include <vector>
 
-namespace audio_assist {
+namespace audio_assist::capture {
 
-struct AudioFrame {
+struct CaptureAudioFrame {
     std::uint64_t timestamp_ms = 0;
     std::uint32_t sample_rate = 0;
     std::uint16_t channels = 0;
@@ -14,13 +14,13 @@ struct AudioFrame {
     std::vector<float> data;
 };
 
-struct DeviceInfo {
+struct CaptureDeviceInfo {
     std::wstring id;
     std::wstring name;
     bool is_default = false;
 };
 
-struct CaptureMetrics {
+struct AudioCaptureMetrics {
     std::uint32_t input_sample_rate = 0;
     std::uint32_t output_sample_rate = 0;
     std::uint64_t pushed_frames = 0;
@@ -30,9 +30,9 @@ struct CaptureMetrics {
     bool device_healthy = false;
 };
 
-enum class CaptureMode {
+enum class AudioCaptureMode {
     EndpointLoopback,
     ApplicationLoopback
 };
 
-}  // namespace audio_assist
+}  // namespace audio_assist::capture

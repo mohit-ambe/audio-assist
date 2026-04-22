@@ -1,7 +1,7 @@
 #pragma once
 
-#include "audio/AudioFrame.h"
-#include "audio/LockFreeRingBuffer.h"
+#include "audio/CaptureAudioFrame.h"
+#include "audio/CaptureRingBuffer.h"
 
 #include <atomic>
 #include <cstddef>
@@ -12,25 +12,25 @@
 #include <thread>
 #include <vector>
 
-namespace audio_assist {
+namespace audio_assist::capture {
 
-class AudioCaptureService {
+class WindowsAudioCaptureService {
 public:
-    AudioCaptureService();
-    ~AudioCaptureService();
+    WindowsAudioCaptureService();
+    ~WindowsAudioCaptureService();
 
-    AudioCaptureService(const AudioCaptureService&) = delete;
-    AudioCaptureService& operator=(const AudioCaptureService&) = delete;
+    WindowsAudioCaptureService(const WindowsAudioCaptureService&) = delete;
+    WindowsAudioCaptureService& operator=(const WindowsAudioCaptureService&) = delete;
 
-    bool initialize(const std::wstring& device_id, CaptureMode mode);
+    bool initialize(const std::wstring& device_id, AudioCaptureMode mode);
     bool start();
     void stop();
 
-    std::optional<AudioFrame> getMonoFrame();
-    std::optional<AudioFrame> getStereoFrame();
-    CaptureMetrics getMetrics() const;
+    std::optional<CaptureAudioFrame> getMonoFrame();
+    std::optional<CaptureAudioFrame> getStereoFrame();
+    AudioCaptureMetrics getMetrics() const;
 
-    static std::vector<DeviceInfo> listOutputDevices();
+    static std::vector<CaptureDeviceInfo> listOutputDevices();
 
 private:
     struct StreamState;
@@ -43,17 +43,17 @@ private:
     std::wstring resolveDeviceId() const;
 
     std::wstring configured_device_id_;
-    CaptureMode mode_ = CaptureMode::EndpointLoopback;
+    AudioCaptureMode mode_ = AudioCaptureMode::EndpointLoopback;
 
     const std::uint32_t target_sample_rate_ = 16000;
     const std::uint32_t frame_duration_ms_ = 20;
     const std::size_t frame_samples_ = (target_sample_rate_ * frame_duration_ms_) / 1000;
 
-    LockFreeRingBuffer<AudioFrame> mono_frames_{256};
-    LockFreeRingBuffer<AudioFrame> stereo_frames_{256};
+    CaptureRingBuffer<CaptureAudioFrame> mono_frames_{256};
+    CaptureRingBuffer<CaptureAudioFrame> stereo_frames_{256};
 
     mutable std::mutex metrics_mutex_;
-    CaptureMetrics metrics_;
+    AudioCaptureMetrics metrics_;
 
     std::vector<float> resample_source_;
     std::vector<float> pending_output_;
@@ -65,4 +65,4 @@ private:
     std::thread capture_thread_;
 };
 
-}  // namespace audio_assist
+}  // namespace audio_assist::capture

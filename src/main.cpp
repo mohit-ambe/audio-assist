@@ -1,6 +1,6 @@
-#include "audio/AudioCaptureService.h"
-#include "audio/FeaturePipeline.h"
-#include "audio/FeatureTensor.h"
+#include "audio/WindowsAudioCaptureService.h"
+#include "audio/CaptureFeaturePipeline.h"
+#include "audio/CaptureFeatureTensor.h"
 
 #include <algorithm>
 #include <chrono>
@@ -15,13 +15,13 @@
 #include <thread>
 #include <vector>
 
-using audio_assist::AudioCaptureService;
-using audio_assist::CaptureMode;
-using audio_assist::FeaturePipeline;
+using audio_assist::capture::AudioCaptureMode;
+using audio_assist::capture::CaptureFeaturePipeline;
+using audio_assist::capture::WindowsAudioCaptureService;
 
 namespace {
 
-double computePeakLevel(const audio_assist::AudioFrame& frame) {
+double computePeakLevel(const audio_assist::capture::CaptureAudioFrame& frame) {
     double peak = 0.0;
     for (float sample : frame.data) {
         peak = std::max(peak, static_cast<double>(std::fabs(sample)));
@@ -29,7 +29,7 @@ double computePeakLevel(const audio_assist::AudioFrame& frame) {
     return peak;
 }
 
-void applyBoost(audio_assist::AudioFrame& frame, float boost) {
+void applyBoost(audio_assist::capture::CaptureAudioFrame& frame, float boost) {
     if (boost == 1.0f) {
         return;
     }
@@ -63,7 +63,7 @@ std::wstring shortenText(const std::wstring& text, std::size_t max_length) {
     return text.substr(0, max_length - 3) + L"...";
 }
 
-double computeTensorActivity(const audio_assist::FeatureTensor& tensor) {
+double computeTensorActivity(const audio_assist::capture::CaptureFeatureTensor& tensor) {
     double peak = 0.0;
     for (float value : tensor.data) {
         peak = std::max(peak, static_cast<double>(std::fabs(value)));
@@ -72,7 +72,7 @@ double computeTensorActivity(const audio_assist::FeatureTensor& tensor) {
 }
 
 void printUsage() {
-    std::wcout << L"audio_assist options:\n"
+    std::wcout << L"audio_assist_capture options:\n"
                << L"  --list                 List active render devices\n"
                << L"  --device <id>          Capture from a specific device id\n"
                << L"  --seconds <n>          Run capture for n seconds (default 10)\n"
@@ -105,7 +105,7 @@ int wmain(int argc, wchar_t* argv[]) {
         }
     }
 
-    const auto devices = AudioCaptureService::listOutputDevices();
+    const auto devices = WindowsAudioCaptureService::listOutputDevices();
     if (devices.empty()) {
         std::wcerr << L"No active render devices found." << std::endl;
     }
@@ -118,8 +118,8 @@ int wmain(int argc, wchar_t* argv[]) {
         return 0;
     }
 
-    AudioCaptureService service;
-    if (!service.initialize(device_id, CaptureMode::EndpointLoopback)) {
+    WindowsAudioCaptureService service;
+    if (!service.initialize(device_id, AudioCaptureMode::EndpointLoopback)) {
         std::wcerr << L"Failed to initialize audio capture service." << std::endl;
         return 1;
     }
@@ -129,7 +129,7 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
 
-    FeaturePipeline feature_pipeline;
+    CaptureFeaturePipeline feature_pipeline;
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(duration_seconds);
     std::uint64_t mono_frames = 0;

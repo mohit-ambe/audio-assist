@@ -8,5 +8,5 @@ set "BUILD_DIR=%PROJECT_ROOT%\build"
 cmake -S "%PROJECT_ROOT%" -B "%BUILD_DIR%"
 if errorlevel 1 exit /b %errorlevel%
 
-cmake --build "%BUILD_DIR%" --config Release
+cmake --build "%BUILD_DIR%" --config Release --target audio_assist_capture
 exit /b %errorlevel%
